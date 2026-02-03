@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Recept Configurator</title>
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #1f2942;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --success: #4ade80;
+            --border-radius: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding: 20px;
+            padding-bottom: 100px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="url"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            margin-top: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: #1a1a2e;
+        }
+
+        .btn-success:hover {
+            background: #22c55e;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* File upload */
+        .file-upload {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload:hover {
+            border-color: var(--accent);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .file-upload.has-file {
+            border-color: var(--success);
+            background: rgba(74, 222, 128, 0.1);
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .file-upload-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Preview image */
+        .preview-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Result */
+        .result {
+            display: none;
+        }
+
+        .result.active {
+            display: block;
+        }
+
+        .recipe-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .recipe-content {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            font-size: 0.95rem;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .recipe-content h1 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            color: var(--accent);
+        }
+
+        .recipe-content h2 {
+            font-size: 1.2rem;
+            margin: 20px 0 12px;
+            color: var(--accent-hover);
+        }
+
+        .hashtags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .hashtag {
+            background: rgba(233, 69, 96, 0.2);
+            color: var(--accent);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        /* Settings */
+        .settings-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+
+        .settings-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 200;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .settings-panel.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .settings-content {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .api-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+
+        .api-status.connected {
+            background: rgba(74, 222, 128, 0.2);
+            color: var(--success);
+        }
+
+        .api-status.disconnected {
+            background: rgba(233, 69, 96, 0.2);
+            color: var(--accent);
+        }
+
+        /* Actions */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Error message */
+        .error {
+            background: rgba(233, 69, 96, 0.2);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        /* Instructions */
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+
+        .instructions h3 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+        }
+
+        .instructions ol {
+            padding-left: 20px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.8;
+        }
+
+        .instructions a {
+            color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            body {
+                padding: 15px;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            header h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="settings-toggle" onclick="toggleSettings()">⚙️</button>
+
+    <div class="container">
+        <header>
+            <h1>🍳 Recept Configurator</h1>
+            <p>Zet elk recept om naar een ADHD-vriendelijk format</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="card" id="inputSection">
+            <h2>📥 Recept invoer</h2>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('url')">🔗 URL</button>
+                <button class="tab" onclick="switchTab('photo')">📷 Foto</button>
+                <button class="tab" onclick="switchTab('youtube')">▶️ YouTube</button>
+            </div>
+
+            <div id="urlTab" class="tab-content active">
+                <div class="input-group">
+                    <label>Plak een recept URL</label>
+                    <input type="url" id="recipeUrl" placeholder="https://www.ah.nl/allerhande/recept/...">
+                </div>
+            </div>
+
+            <div id="photoTab" class="tab-content">
+                <div class="file-upload" id="fileUpload" onclick="document.getElementById('photoInput').click()">
+                    <input type="file" id="photoInput" accept="image/*" onchange="handleFileSelect(event)">
+                    <div class="file-upload-icon">📷</div>
+                    <div class="file-upload-text">Tik om een foto te selecteren<br>of maak een foto van een kookboekpagina</div>
+                </div>
+                <img id="previewImage" class="preview-image">
+            </div>
+
+            <div id="youtubeTab" class="tab-content">
+                <div class="input-group">
+                    <label>Plak een YouTube URL</label>
+                    <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="convertBtn" onclick="convertRecipe()">
+                ✨ Omzetten naar recept
+            </button>
+
+            <div class="error" id="errorMsg"></div>
+        </div>
+
+        <!-- Loading Section -->
+        <div class="loading" id="loadingSection">
+            <div class="spinner"></div>
+            <div class="loading-text" id="loadingText">Recept wordt geanalyseerd...</div>
+        </div>
+
+        <!-- Result Section -->
+        <div class="result" id="resultSection">
+            <div class="card">
+                <h2>✅ Recept klaar!</h2>
+                <img id="recipeImage" class="recipe-image" src="" alt="Recept afbeelding">
+                <div class="recipe-content" id="recipeContent"></div>
+
+                <div class="actions">
+                    <button class="btn btn-success" onclick="openInNotes()">
+                        📝 Opslaan in Apple Notities
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyToClipboard()">
+                        📋 Kopieer naar klembord
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetForm()">
+                        🔄 Nieuw recept
+                    </button>
+                    <button class="btn btn-secondary" onclick="showShortcutHelp()" style="margin-top: 20px; font-size: 0.85rem;">
+                        ❓ Shortcut instellen voor automatisch opslaan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shortcut Help Panel -->
+    <div class="settings-panel" id="shortcutHelpPanel">
+        <div class="settings-content" style="max-width: 550px;">
+            <div class="settings-header">
+                <h2>📱 iOS Shortcuts instellen</h2>
+                <button class="close-btn" onclick="hideShortcutHelp()">×</button>
+            </div>
+
+            <div class="instructions" style="background: none; padding: 0;">
+                <h3 style="margin-bottom: 16px;">Deel 1: Shortcut "Recept Opslaan"</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">Deze shortcut slaat recepten automatisch op in Apple Notities:</p>
+                <ol>
+                    <li>Open de <strong>Shortcuts</strong> app op je iPhone</li>
+                    <li>Tik op <strong>+</strong> rechtsboven om een nieuwe shortcut te maken</li>
+                    <li>Zoek en voeg toe: <strong>"Maak notitie"</strong></li>
+                    <li>Stel in:
+                        <ul style="margin-top: 8px; margin-left: 16px;">
+                            <li>Inhoud: <strong>Snelkoppelingsinvoer</strong></li>
+                            <li>Map: <strong>Recepten</strong> (maak deze eerst aan in Notities)</li>
+                        </ul>
+                    </li>
+                    <li>Tik op de naam bovenaan en noem het: <strong>Recept Opslaan</strong></li>
+                    <li>Tik op <strong>Gereed</strong></li>
+                </ol>
+
+                <h3 style="margin-top: 24px; margin-bottom: 16px;">Deel 2: Shortcut "Recept Delen" (Share Sheet)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">Deze shortcut opent recepten vanuit de deel-knop:</p>
+                <ol>
+                    <li>Maak een nieuwe shortcut</li>
+                    <li>Zoek en voeg toe: <strong>"URL"</strong></li>
+                    <li>Vul in: <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">https://JOUW-URL/recept.html?url=</code></li>
+                    <li>Voeg een <strong>"Tekst"</strong> actie toe met: <strong>Snelkoppelingsinvoer</strong></li>
+                    <li>Voeg toe: <strong>"URL coderen"</strong></li>
+                    <li>Voeg toe: <strong>"Combineer tekst"</strong> (URL + gecodeerde tekst)</li>
+                    <li>Voeg toe: <strong>"Open URL's"</strong></li>
+                    <li>Noem het: <strong>Recept Configurator</strong></li>
+                    <li>Tik op ⓘ → zet <strong>"Toon in deelmenu"</strong> aan</li>
+                </ol>
+
+                <div style="background: rgba(74, 222, 128, 0.1); border-radius: 12px; padding: 16px; margin-top: 20px;">
+                    <strong style="color: var(--success);">💡 Tip:</strong>
+                    <p style="color: var(--text-secondary); margin-top: 8px; font-size: 0.9rem;">
+                        Host deze pagina op GitHub Pages, Netlify of Vercel (gratis) om hem overal te kunnen gebruiken!
+                    </p>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="hideShortcutHelp()" style="margin-top: 20px;">
+                👍 Begrepen!
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2>⚙️ Instellingen</h2>
+                <button class="close-btn" onclick="toggleSettings()">×</button>
+            </div>
+
+            <div class="api-status disconnected" id="apiStatus">
+                <span>⚠️</span>
+                <span>Geen API key ingesteld</span>
+            </div>
+
+            <div class="input-group">
+                <label>Google Gemini API Key</label>
+                <input type="password" id="apiKeyInput" placeholder="Voer je API key in...">
+            </div>
+
+            <button class="btn btn-primary" onclick="saveApiKey()">
+                💾 Opslaan
+            </button>
+
+            <div class="instructions">
+                <h3>📖 Hoe krijg ik een API key?</h3>
+                <ol>
+                    <li>Ga naar <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></li>
+                    <li>Log in met je Google account</li>
+                    <li>Klik op "Create API Key"</li>
+                    <li>Kopieer de key en plak hem hierboven</li>
+                </ol>
+                <p style="margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);">
+                    💡 De gratis tier geeft je 15 requests per minuut - meer dan genoeg!
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentTab = 'url';
+        let selectedImage = null;
+        let recipeData = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkApiKey();
+            handleUrlParams();
+        });
+
+        // Check for URL parameters (for iOS Shortcut integration)
+        function handleUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            const url = params.get('url');
+            const text = params.get('text');
+
+            if (url) {
+                if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                    switchTab('youtube');
+                    document.getElementById('youtubeUrl').value = url;
+                } else {
+                    switchTab('url');
+                    document.getElementById('recipeUrl').value = url;
+                }
+                // Auto-convert if API key is set
+                if (localStorage.getItem('gemini_api_key')) {
+                    setTimeout(() => convertRecipe(), 500);
+                }
+            } else if (text) {
+                // Text shared (might contain URL)
+                const urlMatch = text.match(/https?:\/\/[^\s]+/);
+                if (urlMatch) {
+                    const extractedUrl = urlMatch[0];
+                    if (extractedUrl.includes('youtube.com') || extractedUrl.includes('youtu.be')) {
+                        switchTab('youtube');
+                        document.getElementById('youtubeUrl').value = extractedUrl;
+                    } else {
+                        switchTab('url');
+                        document.getElementById('recipeUrl').value = extractedUrl;
+                    }
+                    if (localStorage.getItem('gemini_api_key')) {
+                        setTimeout(() => convertRecipe(), 500);
+                    }
+                }
+            }
+        }
+
+        // Tab switching
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            document.querySelector(`.tab:nth-child(${tab === 'url' ? 1 : tab === 'photo' ? 2 : 3})`).classList.add('active');
+            document.getElementById(`${tab}Tab`).classList.add('active');
+        }
+
+        // File handling
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    selectedImage = e.target.result;
+                    document.getElementById('previewImage').src = selectedImage;
+                    document.getElementById('previewImage').style.display = 'block';
+                    document.getElementById('fileUpload').classList.add('has-file');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Settings
+        function toggleSettings() {
+            document.getElementById('settingsPanel').classList.toggle('active');
+        }
+
+        function checkApiKey() {
+            const apiKey = localStorage.getItem('gemini_api_key');
+            const statusEl = document.getElementById('apiStatus');
+
+            if (apiKey) {
+                statusEl.className = 'api-status connected';
+                statusEl.innerHTML = '<span>✅</span><span>API key ingesteld</span>';
+                document.getElementById('apiKeyInput').value = '••••••••••••••••';
+            } else {
+                statusEl.className = 'api-status disconnected';
+                statusEl.innerHTML = '<span>⚠️</span><span>Geen API key ingesteld</span>';
+            }
+        }
+
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (apiKey && !apiKey.includes('•')) {
+                localStorage.setItem('gemini_api_key', apiKey);
+                checkApiKey();
+                toggleSettings();
+                showError('✅ API key opgeslagen!', 'success');
+            }
+        }
+
+        // Error handling
+        function showError(message, type = 'error') {
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.textContent = message;
+            errorEl.style.background = type === 'success' ? 'rgba(74, 222, 128, 0.2)' : 'rgba(233, 69, 96, 0.2)';
+            errorEl.style.borderColor = type === 'success' ? '#4ade80' : '#e94560';
+            errorEl.classList.add('active');
+
+            setTimeout(() => {
+                errorEl.classList.remove('active');
+            }, 5000);
+        }
+
+        // Main conversion function
+        async function convertRecipe() {
+            const apiKey = localStorage.getItem('gemini_api_key');
+
+            if (!apiKey) {
+                toggleSettings();
+                showError('Voer eerst je API key in');
+                return;
+            }
+
+            let input = '';
+            let imageData = null;
+
+            if (currentTab === 'url') {
+                input = document.getElementById('recipeUrl').value.trim();
+                if (!input) {
+                    showError('Voer een URL in');
+                    return;
+                }
+            } else if (currentTab === 'youtube') {
+                input = document.getElementById('youtubeUrl').value.trim();
+                if (!input) {
+                    showError('Voer een YouTube URL in');
+                    return;
+                }
+            } else if (currentTab === 'photo') {
+                if (!selectedImage) {
+                    showError('Selecteer eerst een foto');
+                    return;
+                }
+                imageData = selectedImage;
+            }
+
+            // Show loading
+            document.getElementById('inputSection').style.display = 'none';
+            document.getElementById('loadingSection').classList.add('active');
+            document.getElementById('resultSection').classList.remove('active');
+
+            try {
+                const result = await callGeminiAPI(apiKey, input, imageData);
+                displayResult(result);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('inputSection').style.display = 'block';
+                document.getElementById('loadingSection').classList.remove('active');
+                showError('Er ging iets mis: ' + error.message);
+            }
+        }
+
+        // Fetch URL content via CORS proxy
+        async function fetchUrlContent(url) {
+            // Try multiple CORS proxies for reliability
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}`
+            ];
+
+            for (const proxyUrl of proxies) {
+                try {
+                    const response = await fetch(proxyUrl, { timeout: 10000 });
+                    if (response.ok) {
+                        const html = await response.text();
+                        // Extract text content from HTML
+                        const doc = new DOMParser().parseFromString(html, 'text/html');
+
+                        // Remove scripts and styles
+                        doc.querySelectorAll('script, style, nav, footer, header, aside').forEach(el => el.remove());
+
+                        // Try to find the recipe content specifically
+                        const recipeSelectors = [
+                            '[itemtype*="Recipe"]',
+                            '.recipe',
+                            '#recipe',
+                            'article',
+                            'main',
+                            '.content'
+                        ];
+
+                        let content = '';
+                        for (const selector of recipeSelectors) {
+                            const el = doc.querySelector(selector);
+                            if (el && el.textContent.length > 200) {
+                                content = el.textContent;
+                                break;
+                            }
+                        }
+
+                        if (!content) {
+                            content = doc.body?.textContent || '';
+                        }
+
+                        // Clean up whitespace
+                        content = content.replace(/\s+/g, ' ').trim().substring(0, 15000);
+
+                        // Try to find image
+                        let imageUrl = null;
+                        const ogImage = doc.querySelector('meta[property="og:image"]');
+                        if (ogImage) {
+                            imageUrl = ogImage.getAttribute('content');
+                        } else {
+                            const recipeImg = doc.querySelector('[itemtype*="Recipe"] img, .recipe img, article img');
+                            if (recipeImg) {
+                                imageUrl = recipeImg.src;
+                            }
+                        }
+
+                        return { content, imageUrl, title: doc.title };
+                    }
+                } catch (e) {
+                    console.log('Proxy failed:', e);
+                    continue;
+                }
+            }
+
+            throw new Error('Kon de pagina niet ophalen. Probeer de tekst te kopiëren of een screenshot te maken.');
+        }
+
+        // Extract YouTube video ID
+        function getYouTubeVideoId(url) {
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+                /youtube\.com\/shorts\/([^&\n?#]+)/
+            ];
+
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) return match[1];
+            }
+            return null;
+        }
+
+        // Gemini API call
+        async function callGeminiAPI(apiKey, input, imageData) {
+            const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+            // Build source reference
+            const sourceUrl = (!imageData && input) ? input : null;
+
+            const prompt = `Je bent een recept-assistent die recepten omzet naar een ADHD-vriendelijk format in het Nederlands.
+
+BELANGRIJKE REGELS:
+1. BEHOUD HET ORIGINELE RECEPT ZO VEEL MOGELIJK - verander geen ingrediënten, hoeveelheden of stappen tenzij nodig voor de conversie naar 2 personen
+2. Alle hoeveelheden MOETEN voor 2 personen zijn (reken proportioneel om indien nodig)
+3. Alle maten in Nederlands (geen cups, maar ml/gram)
+4. Duidelijke, korte zinnen - maar behoud de originele instructies
+5. Voeg NIETS toe dat niet in het origineel staat
+6. Geen lange lappen tekst
+
+GEEF HET RECEPT IN DIT EXACTE FORMAT:
+
+# [Receptnaam]
+
+🔗 **Bron**: [URL of "Kookboek foto" als het een foto is]
+
+⏱️ **Tijden**
+- Voorbereidingstijd: X min
+- Kooktijd: X min
+- Totaal: X min
+
+👥 **Porties**: 2 personen
+
+---
+
+## 🛒 Ingrediënten
+- [hoeveelheid] [ingredient]
+- [hoeveelheid] [ingredient]
+(etc.)
+
+## 🔧 Benodigdheden
+- [keukengerei]
+- [keukengerei]
+(etc.)
+
+---
+
+## 📋 Stappenplan
+
+▶️ **STAP 1 - [Fase naam]** (X min)
+• [Actie]
+• [Actie]
+
+▶️ **STAP 2 - [Fase naam]** (X min)
+• [Actie]
+• [Actie]
+
+(etc.)
+
+---
+
+## 🏷️ Tags
+#[categorie] #[categorie] #[categorie]
+
+MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis #vlees #kip #pasta #rijst #aardappel #soep #salade #glutenvrij #zuivelvrij #comfort #gezond #snel #30minuten #weekmenu`;
+
+            let requestBody;
+            let fetchedImageUrl = null;
+
+            if (imageData) {
+                // Image input
+                const base64Data = imageData.split(',')[1];
+                const mimeType = imageData.split(';')[0].split(':')[1];
+
+                requestBody = {
+                    contents: [{
+                        parts: [
+                            { text: prompt + '\n\nAnalyseer deze foto van een recept en geef het recept in het gevraagde format.\n\nBRON: Kookboek foto\n\nBelangrijk: Behoud het recept exact zoals het in de foto staat, alleen het format aanpassen en omrekenen naar 2 personen.' },
+                            {
+                                inline_data: {
+                                    mime_type: mimeType,
+                                    data: base64Data
+                                }
+                            }
+                        ]
+                    }]
+                };
+            } else if (input.includes('youtube.com') || input.includes('youtu.be')) {
+                // YouTube URL
+                document.getElementById('loadingText').textContent = 'YouTube video wordt geanalyseerd...';
+
+                const videoId = getYouTubeVideoId(input);
+                if (!videoId) {
+                    throw new Error('Ongeldige YouTube URL');
+                }
+
+                // Get video thumbnail as image
+                fetchedImageUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+                // For YouTube, we ask Gemini to analyze based on the video title/description
+                // We'll fetch the page to get video info
+                try {
+                    const ytData = await fetchUrlContent(input);
+                    requestBody = {
+                        contents: [{
+                            parts: [{
+                                text: prompt + `\n\nDit is informatie van een YouTube kookvideo. Extraheer het recept uit deze informatie:\n\nBRON URL: ${input}\n\nTitel: ${ytData.title}\n\nBeschrijving en content:\n${ytData.content}\n\nGeef het recept in het gevraagde format. Behoud het recept zo origineel mogelijk - voeg niets toe. Als je niet genoeg informatie hebt, maak dan een educated guess op basis van de titel.`
+                            }]
+                        }]
+                    };
+                } catch (e) {
+                    // Fallback: just use the URL
+                    requestBody = {
+                        contents: [{
+                            parts: [{
+                                text: prompt + `\n\nDit is een YouTube kookvideo URL: ${input}\n\nBRON URL: ${input}\n\nIk kan de video niet direct bekijken, maar geef alsjeblieft een basis recept format terug met placeholders die de gebruiker kan invullen. Zet [INVULLEN] waar informatie ontbreekt.`
+                            }]
+                        }]
+                    };
+                }
+            } else {
+                // Regular URL - fetch the page content
+                document.getElementById('loadingText').textContent = 'Recept wordt opgehaald...';
+
+                const pageData = await fetchUrlContent(input);
+                fetchedImageUrl = pageData.imageUrl;
+
+                requestBody = {
+                    contents: [{
+                        parts: [{
+                            text: prompt + `\n\nHieronder staat de inhoud van een receptpagina. Extraheer het recept en zet het om naar het gevraagde format.\n\nBRON URL: ${input}\n\nBelangrijk: Behoud het recept zo origineel mogelijk - verander alleen het format en reken om naar 2 personen. Voeg geen extra ingrediënten of stappen toe.\n\n---\n${pageData.content}\n---`
+                        }]
+                    }]
+                };
+            }
+
+            document.getElementById('loadingText').textContent = 'Recept wordt geanalyseerd met AI...';
+
+            const response = await fetch(`${endpoint}?key=${apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'API request failed');
+            }
+
+            const data = await response.json();
+            const text = data.candidates[0]?.content?.parts[0]?.text;
+
+            if (!text) {
+                throw new Error('Geen recept ontvangen van AI');
+            }
+
+            // Clean up the recipe text
+            const recipeText = text.trim();
+
+            return {
+                recipe: recipeText,
+                imageUrl: fetchedImageUrl
+            };
+        }
+
+        // Display result
+        function displayResult(result) {
+            document.getElementById('loadingSection').classList.remove('active');
+            document.getElementById('resultSection').classList.add('active');
+
+            recipeData = result;
+
+            // Set image
+            const imageEl = document.getElementById('recipeImage');
+            if (result.imageUrl) {
+                imageEl.src = result.imageUrl;
+                imageEl.style.display = 'block';
+            } else if (selectedImage) {
+                imageEl.src = selectedImage;
+                imageEl.style.display = 'block';
+            } else {
+                imageEl.style.display = 'none';
+            }
+
+            // Set recipe content
+            document.getElementById('recipeContent').innerHTML = formatRecipeHTML(result.recipe);
+        }
+
+        // Format recipe for display
+        function formatRecipeHTML(text) {
+            return text
+                .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/^- (.+)$/gm, '• $1')
+                .replace(/^---$/gm, '<hr style="border: none; border-top: 1px solid rgba(255,255,255,0.2); margin: 16px 0;">')
+                .replace(/(#\w+)/g, '<span class="hashtag">$1</span>');
+        }
+
+        // Apple Notes integration
+        function openInNotes() {
+            if (!recipeData) return;
+
+            // Create clean text version for Notes
+            const plainText = recipeData.recipe
+                .replace(/\*\*/g, '')
+                .replace(/---/g, '─────────────────');
+
+            // Copy to clipboard first (always works)
+            navigator.clipboard.writeText(plainText).catch(() => {
+                const textarea = document.createElement('textarea');
+                textarea.value = plainText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            });
+
+            // Try to run the iOS Shortcut
+            const encodedText = encodeURIComponent(plainText);
+            const shortcutUrl = `shortcuts://run-shortcut?name=Recept%20Opslaan&input=text&text=${encodedText}`;
+
+            // Create a hidden iframe to try the shortcut without navigating away
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = shortcutUrl;
+            document.body.appendChild(iframe);
+
+            // Show success message
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+                showError('✅ Recept gekopieerd! Als je de Shortcut hebt ingesteld, wordt het automatisch opgeslagen.', 'success');
+            }, 1000);
+        }
+
+        // Show shortcut setup instructions
+        function showShortcutHelp() {
+            document.getElementById('shortcutHelpPanel').classList.add('active');
+        }
+
+        function hideShortcutHelp() {
+            document.getElementById('shortcutHelpPanel').classList.remove('active');
+        }
+
+        // Copy to clipboard
+        function copyToClipboard(silent = false) {
+            if (!recipeData) return;
+
+            const plainText = recipeData.recipe.replace(/\*\*/g, '');
+
+            navigator.clipboard.writeText(plainText).then(() => {
+                if (!silent) {
+                    showError('✅ Gekopieerd naar klembord!', 'success');
+                }
+            }).catch(() => {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = plainText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (!silent) {
+                    showError('✅ Gekopieerd naar klembord!', 'success');
+                }
+            });
+        }
+
+        // Reset form
+        function resetForm() {
+            document.getElementById('inputSection').style.display = 'block';
+            document.getElementById('resultSection').classList.remove('active');
+            document.getElementById('recipeUrl').value = '';
+            document.getElementById('youtubeUrl').value = '';
+            document.getElementById('previewImage').style.display = 'none';
+            document.getElementById('fileUpload').classList.remove('has-file');
+            selectedImage = null;
+            recipeData = null;
+        }
+    </script>
+</body>
+</html>
