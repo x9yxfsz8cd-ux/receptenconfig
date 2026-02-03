@@ -634,6 +634,7 @@
         let currentTab = 'url';
         let selectedImage = null;
         let recipeData = null;
+        let autoMode = false;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -646,6 +647,7 @@
             const params = new URLSearchParams(window.location.search);
             const url = params.get('url');
             const text = params.get('text');
+            autoMode = params.get('auto') === 'true';
 
             if (url) {
                 if (url.includes('youtube.com') || url.includes('youtu.be')) {
@@ -1101,6 +1103,35 @@ MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis 
 
             // Set recipe content
             document.getElementById('recipeContent').innerHTML = formatRecipeHTML(result.recipe);
+
+            // In auto mode: automatically save to Apple Notes via Shortcut
+            if (autoMode) {
+                autoSaveToNotes();
+            }
+        }
+
+        // Auto save - copies recipe to clipboard then triggers Shortcut
+        function autoSaveToNotes() {
+            if (!recipeData) return;
+
+            const plainText = recipeData.recipe
+                .replace(/\*\*/g, '')
+                .replace(/---/g, '─────────────────');
+
+            // First copy to clipboard
+            navigator.clipboard.writeText(plainText).then(() => {
+                // Then open the Shortcut (which reads from clipboard)
+                window.location.href = 'shortcuts://run-shortcut?name=Recept%20Opslaan';
+            }).catch(() => {
+                // Fallback clipboard copy
+                const textarea = document.createElement('textarea');
+                textarea.value = plainText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                window.location.href = 'shortcuts://run-shortcut?name=Recept%20Opslaan';
+            });
         }
 
         // Format recipe for display
