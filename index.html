@@ -876,9 +876,13 @@
             return null;
         }
 
-        // Gemini API call
+        // Gemini API call - tries multiple models for reliability
         async function callGeminiAPI(apiKey, input, imageData) {
-            const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+            const models = [
+                'gemini-2.0-flash',
+                'gemini-2.0-flash-lite',
+                'gemini-1.5-flash'
+            ];
 
             // Build source reference
             const sourceUrl = (!imageData && input) ? input : null;
@@ -1011,33 +1015,69 @@ MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis 
 
             document.getElementById('loadingText').textContent = 'Recept wordt geanalyseerd met AI...';
 
-            const response = await fetch(`${endpoint}?key=${apiKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
+            // Try multiple models in case one has quota issues
+            let lastError = null;
+            for (const model of models) {
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error?.message || 'API request failed');
+                try {
+                    document.getElementById('loadingText').textContent = `Recept analyseren met ${model}...`;
+
+                    const response = await fetch(`${endpoint}?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        const errorMsg = errorData.error?.message || 'API request failed';
+
+                        // If quota exceeded, try next model
+                        if (response.status === 429 || errorMsg.includes('quota') || errorMsg.includes('rate')) {
+                            console.log(`${model} quota exceeded, trying next model...`);
+                            lastError = new Error(errorMsg);
+                            continue;
+                        }
+
+                        throw new Error(errorMsg);
+                    }
+
+                    const data = await response.json();
+                    const text = data.candidates[0]?.content?.parts[0]?.text;
+
+                    if (!text) {
+                        throw new Error('Geen recept ontvangen van AI');
+                    }
+
+                    // Clean up the recipe text
+                    const recipeText = text.trim();
+
+                    return {
+                        recipe: recipeText,
+                        imageUrl: fetchedImageUrl
+                    };
+                } catch (e) {
+                    lastError = e;
+                    // Only retry on quota/rate errors
+                    if (e.message.includes('quota') || e.message.includes('rate') || e.message.includes('429')) {
+                        continue;
+                    }
+                    throw e;
+                }
             }
 
-            const data = await response.json();
-            const text = data.candidates[0]?.content?.parts[0]?.text;
-
-            if (!text) {
-                throw new Error('Geen recept ontvangen van AI');
-            }
-
-            // Clean up the recipe text
-            const recipeText = text.trim();
-
-            return {
-                recipe: recipeText,
-                imageUrl: fetchedImageUrl
-            };
+            // All models failed
+            throw new Error(
+                'Alle AI modellen zijn op dit moment niet beschikbaar.\n\n' +
+                'Dit komt waarschijnlijk doordat je API key geen gratis quota meer heeft.\n\n' +
+                'Oplossing: Maak een nieuwe API key aan in een nieuw Google Cloud project:\n' +
+                '1. Ga naar aistudio.google.com/apikey\n' +
+                '2. Klik "Create API Key in new project"\n' +
+                '3. Plak de nieuwe key in de instellingen (⚙️)'
+            );
         }
 
         // Display result
