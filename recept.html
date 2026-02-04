@@ -156,7 +156,7 @@
                 <div class="file-upload" id="fileUpload" onclick="document.getElementById('photoInput').click()">
                     <input type="file" id="photoInput" accept="image/*" capture="environment" onchange="handleFileSelect(event)">
                     <div class="file-upload-icon">Foto</div>
-                    <div class="file-upload-text">Tik om een foto te selecteren<br>of maak een foto van een kookboekpagina</div>
+                    <div class="file-upload-text">Tik om een foto te selecteren<br>Kookboek, screenshot van Instagram, of ander recept</div>
                 </div>
                 <img id="previewImage" class="preview-image">
             </div>
@@ -358,6 +358,53 @@
             }
         }
 
+        function resolveUrl(relativeUrl, baseUrl) {
+            if (!relativeUrl) return null;
+            if (relativeUrl.startsWith('http')) return relativeUrl;
+            if (relativeUrl.startsWith('//')) return 'https:' + relativeUrl;
+            try {
+                return new URL(relativeUrl, baseUrl).href;
+            } catch (e) { return null; }
+        }
+
+        function extractImageUrl(doc, baseUrl) {
+            // 1. JSON-LD structured data (most reliable for recipe sites)
+            const jsonLdScripts = doc.querySelectorAll('script[type="application/ld+json"]');
+            for (const script of jsonLdScripts) {
+                try {
+                    const data = JSON.parse(script.textContent);
+                    const recipes = Array.isArray(data) ? data : data['@graph'] || [data];
+                    for (const item of recipes) {
+                        if (item['@type'] === 'Recipe' || item['@type']?.includes?.('Recipe')) {
+                            const img = item.image;
+                            if (typeof img === 'string') return resolveUrl(img, baseUrl);
+                            if (Array.isArray(img)) return resolveUrl(img[0]?.url || img[0], baseUrl);
+                            if (img?.url) return resolveUrl(img.url, baseUrl);
+                        }
+                    }
+                } catch (e) {}
+            }
+            // 2. og:image meta tag
+            const ogImage = doc.querySelector('meta[property="og:image"]');
+            if (ogImage?.getAttribute('content')) return resolveUrl(ogImage.getAttribute('content'), baseUrl);
+            // 3. twitter:image meta tag
+            const twImage = doc.querySelector('meta[name="twitter:image"], meta[property="twitter:image"]');
+            if (twImage?.getAttribute('content')) return resolveUrl(twImage.getAttribute('content'), baseUrl);
+            // 4. Recipe container images
+            const imgSelectors = [
+                '[itemtype*="Recipe"] img', '.recipe-image img', '.recipe img',
+                'article img', 'main img', '.hero img', '.post-thumbnail img'
+            ];
+            for (const selector of imgSelectors) {
+                const img = doc.querySelector(selector);
+                const src = img?.getAttribute('src') || img?.getAttribute('data-src') || img?.getAttribute('data-lazy-src');
+                if (src && !src.includes('icon') && !src.includes('logo') && !src.includes('avatar')) {
+                    return resolveUrl(src, baseUrl);
+                }
+            }
+            return null;
+        }
+
         async function fetchUrlContent(url) {
             const proxies = [
                 `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -369,6 +416,10 @@
                     if (response.ok) {
                         const html = await response.text();
                         const doc = new DOMParser().parseFromString(html, 'text/html');
+
+                        // Extract image BEFORE removing scripts (JSON-LD is in script tags)
+                        let imageUrl = extractImageUrl(doc, url);
+
                         doc.querySelectorAll('script, style, nav, footer, aside').forEach(el => el.remove());
 
                         const recipeSelectors = ['[itemtype*="Recipe"]', '.recipe', '#recipe', 'article', 'main', '.content'];
@@ -380,14 +431,6 @@
                         if (!content) content = doc.body?.textContent || '';
                         content = content.replace(/\s+/g, ' ').trim().substring(0, 15000);
 
-                        let imageUrl = null;
-                        const ogImage = doc.querySelector('meta[property="og:image"]');
-                        if (ogImage) imageUrl = ogImage.getAttribute('content');
-                        if (!imageUrl) {
-                            const recipeImg = doc.querySelector('[itemtype*="Recipe"] img, .recipe img, article img, main img');
-                            if (recipeImg) imageUrl = recipeImg.getAttribute('src') || recipeImg.getAttribute('data-src');
-                        }
-
                         return { content, imageUrl, title: doc.title };
                     }
                 } catch (e) { continue; }
@@ -395,14 +438,67 @@
             throw new Error('Kon de pagina niet ophalen.');
         }
 
-        async function fetchYouTubeTranscript(videoId) {
-            // Try to get more info from YouTube page including description with timestamps
+        async function fetchYouTubeInfo(videoId, apiKey) {
+            // Method 1: YouTube Data API v3 (most reliable, uses same Google API key)
+            try {
+                const ytApiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${apiKey}`;
+                const response = await fetch(ytApiUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.items && data.items.length > 0) {
+                        const item = data.items[0];
+                        const duration = parseDuration(item.contentDetails?.duration);
+                        return {
+                            title: item.snippet.title,
+                            content: item.snippet.description,
+                            duration: duration,
+                            source: 'youtube-api'
+                        };
+                    }
+                }
+            } catch (e) { console.log('YouTube API failed:', e); }
+
+            // Method 2: Piped API instances (no API key needed)
+            const pipedInstances = [
+                'https://pipedapi.kavin.rocks',
+                'https://pipedapi.adminforge.de',
+                'https://api.piped.projectsegfau.lt'
+            ];
+            for (const instance of pipedInstances) {
+                try {
+                    const response = await fetch(`${instance}/streams/${videoId}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        return {
+                            title: data.title,
+                            content: data.description || '',
+                            duration: data.duration ? Math.round(data.duration / 60) : null,
+                            source: 'piped'
+                        };
+                    }
+                } catch (e) { continue; }
+            }
+
+            // Method 3: CORS proxy fallback
             try {
                 const ytData = await fetchUrlContent(`https://www.youtube.com/watch?v=${videoId}`);
-                return ytData;
-            } catch (e) {
-                return null;
-            }
+                if (ytData && ytData.content && ytData.content.length > 200) {
+                    return { ...ytData, source: 'proxy' };
+                }
+            } catch (e) {}
+
+            return null;
+        }
+
+        function parseDuration(isoDuration) {
+            // Parse ISO 8601 duration (e.g., PT15M30S) to minutes
+            if (!isoDuration) return null;
+            const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (!match) return null;
+            const hours = parseInt(match[1] || 0);
+            const minutes = parseInt(match[2] || 0);
+            const seconds = parseInt(match[3] || 0);
+            return Math.round(hours * 60 + minutes + seconds / 60);
         }
 
         function getYouTubeVideoId(url) {
@@ -467,7 +563,7 @@ STAP 2 - [Fase naam] ([X] min)
 Tags: #[categorie] #[categorie] #[categorie]
 
 Bron: [URL of "Kookboek foto"]
-Porties aanpassen: https://cooked.wiki/
+Porties aanpassen: [WORDT AUTOMATISCH INGEVULD]
 
 MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis #vlees #kip #pasta #rijst #aardappel #soep #salade #glutenvrij #zuivelvrij #comfort #gezond #snel #weekmenu`;
 
@@ -480,7 +576,21 @@ MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis 
                 requestBody = {
                     contents: [{
                         parts: [
-                            { text: prompt + '\n\nAnalyseer deze foto van een recept en geef het recept in het gevraagde format.\nBRON: Kookboek foto\nBehoud het recept exact zoals het in de foto staat, alleen het format aanpassen en omrekenen naar 4 personen.' },
+                            { text: prompt + `\n\nAnalyseer deze foto en geef het recept in het gevraagde format.
+
+Dit kan zijn:
+- Een foto van een kookboekpagina
+- Een screenshot van een recept op Instagram, TikTok of andere social media
+- Een screenshot van een receptenwebsite
+- Een foto van een handgeschreven recept
+
+INSTRUCTIES:
+- Negeer alle social media elementen (likes, comments, gebruikersnamen, navigatie, advertenties)
+- Focus ALLEEN op de receptinhoud (ingredienten, stappen, titel)
+- Als het recept niet volledig zichtbaar is, geef dan wat je kunt lezen en markeer ontbrekende delen met [niet zichtbaar]
+- Behoud het recept exact zoals het in de foto staat, alleen het format aanpassen en omrekenen naar 4 personen
+
+BRON: Foto` },
                             { inline_data: { mime_type: mimeType, data: base64Data } }
                         ]
                     }]
@@ -493,39 +603,52 @@ MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis 
                 fetchedImageUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 
                 document.getElementById('loadingText').textContent = 'Video informatie ophalen...';
-                const ytData = await fetchYouTubeTranscript(videoId);
+                const ytData = await fetchYouTubeInfo(videoId, apiKey);
 
-                if (ytData) {
+                const durationInfo = ytData?.duration ? `\nVideoduur: ${ytData.duration} minuten` : '';
+
+                if (ytData && ytData.content && ytData.content.length > 50) {
                     requestBody = {
                         contents: [{
                             parts: [{
-                                text: prompt + `\n\nDit is informatie van een YouTube kookvideo. Extraheer het recept uit deze informatie.
+                                text: prompt + `\n\nDit is informatie van een YouTube kookvideo. Extraheer het VOLLEDIGE recept uit deze informatie.
 
 BRON URL: ${input}
-Titel: ${ytData.title}
+Titel: ${ytData.title}${durationInfo}
 
-Beschrijving en content van de video pagina:
+Videobeschrijving:
 ${ytData.content}
 
 BELANGRIJKE INSTRUCTIES VOOR YOUTUBE:
-- Analyseer de beschrijving en eventuele timestamps zorgvuldig
-- Als exacte tijden niet vermeld worden, maak dan realistische inschattingen:
+- De videobeschrijving bevat vaak de volledige ingredientenlijst en stappen - gebruik deze EXACT
+- Analyseer eventuele timestamps zorgvuldig voor tijdsinschattingen
+- Als exacte tijden niet vermeld worden, maak realistische inschattingen:
   * Groenten snijden: 5-10 min
-  * Iets aanbakken/fruiten: 3-5 min
+  * Uien/knoflook fruiten: 3-5 min
   * Saus maken: 5-10 min
   * Pasta koken: 8-12 min
-  * Vlees bakken: varies per dikte
+  * Vlees bakken: afhankelijk van dikte
   * Oven: kijk naar temperatuur indicaties
+${ytData.duration ? `- De totale video duurt ${ytData.duration} minuten, gebruik dit als referentie voor de totale bereidingstijd` : ''}
 - Behoud het recept zo origineel mogelijk, voeg niets toe
-- Als ingredienten in de beschrijving staan, gebruik die exact`
+- Als ingredienten in de beschrijving staan, gebruik die exact (alleen omrekenen naar 4 personen)`
                             }]
                         }]
                     };
                 } else {
+                    // No description available - ask Gemini to use its knowledge
                     requestBody = {
                         contents: [{
                             parts: [{
-                                text: prompt + `\n\nDit is een YouTube kookvideo URL: ${input}\nBRON URL: ${input}\nGeef een basis recept format terug. Zet [INVULLEN] waar informatie ontbreekt.`
+                                text: prompt + `\n\nDit is een YouTube kookvideo: ${input}
+${ytData?.title ? `Titel: ${ytData.title}` : ''}${durationInfo}
+BRON URL: ${input}
+
+De videobeschrijving kon niet worden opgehaald. Geef op basis van de videotitel${ytData?.title ? ' "' + ytData.title + '"' : ''} het recept in het gevraagde format.
+- Gebruik je kennis over dit gerecht om een authentiek recept te geven
+- Geef realistische ingredienten en hoeveelheden voor 4 personen
+- Maak duidelijk dat het gebaseerd is op de video maar dat exacte hoeveelheden kunnen afwijken
+- Voeg bij de ingredienten toe: "(hoeveelheden bij benadering)" als eerste regel`
                             }]
                         }]
                     };
@@ -576,7 +699,30 @@ BELANGRIJKE INSTRUCTIES VOOR YOUTUBE:
                         if (imgMatch) fetchedImageUrl = imgMatch[0];
                     }
 
-                    return { recipe: text.trim(), imageUrl: fetchedImageUrl };
+                    let recipe = text.trim();
+                    // Replace placeholder with actual cooked.wiki link
+                    const sourceUrl = (!imageData && input) ? input : null;
+                    if (sourceUrl) {
+                        const cookedUrl = `https://cooked.wiki/loading/new?url=${encodeURIComponent(sourceUrl)}`;
+                        recipe = recipe.replace(
+                            /Porties aanpassen:.*(\[WORDT AUTOMATISCH INGEVULD\]|https:\/\/cooked\.wiki\/?)/,
+                            `Porties aanpassen: ${cookedUrl}`
+                        );
+                        // If placeholder wasn't in the response, append it
+                        if (!recipe.includes('cooked.wiki/loading/new')) {
+                            recipe = recipe.replace(
+                                /Porties aanpassen:.*/,
+                                `Porties aanpassen: ${cookedUrl}`
+                            );
+                        }
+                        if (!recipe.includes('Porties aanpassen')) {
+                            recipe += `\nPorties aanpassen: ${cookedUrl}`;
+                        }
+                    } else {
+                        // Photo mode - remove the placeholder line
+                        recipe = recipe.replace(/\nPorties aanpassen:.*\[WORDT AUTOMATISCH INGEVULD\]/, '');
+                    }
+                    return { recipe, imageUrl: fetchedImageUrl, sourceUrl };
                 } catch (e) {
                     lastError = e;
                     if (e.message.includes('quota') || e.message.includes('rate') || e.message.includes('429')) continue;
@@ -626,6 +772,8 @@ BELANGRIJKE INSTRUCTIES VOOR YOUTUBE:
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/^- (.+)$/gm, '&bull; $1')
                 .replace(/^---$/gm, '<hr>')
+                .replace(/Porties aanpassen: (https:\/\/cooked\.wiki\/[^\s]+)/g, 'Porties aanpassen: <a href="$1" target="_blank" style="color: var(--accent);">klik hier</a>')
+                .replace(/Bron: (https?:\/\/[^\s]+)/g, 'Bron: <a href="$1" target="_blank" style="color: var(--accent);">$1</a>')
                 .replace(/(#\w+)/g, '<span class="hashtag">$1</span>')
                 .replace(/^(INGREDIENTEN|BENODIGDHEDEN|STAPPENPLAN)$/gm, '<h2>$1</h2>')
                 .replace(/^(STAP \d+ - .+)$/gm, '<strong>$1</strong>')
