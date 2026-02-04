@@ -335,6 +335,11 @@
             if (currentTab === 'url') {
                 input = document.getElementById('recipeUrl').value.trim();
                 if (!input) { showError('Voer een URL in'); return; }
+                // Detect Instagram/TikTok URLs - these block CORS, suggest photo tab
+                if (input.includes('instagram.com') || input.includes('tiktok.com')) {
+                    showError('Instagram en TikTok blokkeren directe toegang. Maak een screenshot van het recept en gebruik de Foto tab.');
+                    return;
+                }
             } else if (currentTab === 'youtube') {
                 input = document.getElementById('youtubeUrl').value.trim();
                 if (!input) { showError('Voer een YouTube URL in'); return; }
@@ -409,7 +414,6 @@
             const proxies = [
                 { url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, json: true },
                 { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, json: false },
-                { url: `https://corsproxy.io/?${encodeURIComponent(url)}`, json: false },
                 { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, json: false }
             ];
             for (const proxy of proxies) {
@@ -424,6 +428,11 @@
                             html = await response.text();
                         }
                         if (!html || html.length < 100) continue;
+
+                        // Detect CORS proxy landing pages returning their own content
+                        const lower = html.toLowerCase();
+                        if (lower.includes('cors proxy') || lower.includes('corsproxy') || lower.includes('fix cors errors')) continue;
+
                         const doc = new DOMParser().parseFromString(html, 'text/html');
 
                         // Extract image BEFORE removing scripts (JSON-LD is in script tags)
@@ -587,8 +596,7 @@ STAP 2 - [Fase naam] ([X] min)
 
 Tags: #[categorie] #[categorie] #[categorie]
 
-Bron: [URL of "Kookboek foto"]
-Porties aanpassen: [WORDT AUTOMATISCH INGEVULD]
+Bron: [de exacte URL zonder brackets, of "Foto"]
 
 MOGELIJKE TAGS: #ontbijt #lunch #diner #snack #dessert #vega #veganistisch #vis #vlees #kip #pasta #rijst #aardappel #soep #salade #glutenvrij #zuivelvrij #comfort #gezond #snel #weekmenu`;
 
@@ -661,22 +669,8 @@ ${ytData.duration ? `- De totale video duurt ${ytData.duration} minuten, gebruik
                         }]
                     };
                 } else {
-                    // No description available - ask Gemini to use its knowledge
-                    requestBody = {
-                        contents: [{
-                            parts: [{
-                                text: prompt + `\n\nDit is een YouTube kookvideo: ${input}
-${ytData?.title ? `Titel: ${ytData.title}` : ''}${durationInfo}
-BRON URL: ${input}
-
-De videobeschrijving kon niet worden opgehaald. Geef op basis van de videotitel${ytData?.title ? ' "' + ytData.title + '"' : ''} het recept in het gevraagde format.
-- Gebruik je kennis over dit gerecht om een authentiek recept te geven
-- Geef realistische ingredienten en hoeveelheden voor 4 personen
-- Maak duidelijk dat het gebaseerd is op de video maar dat exacte hoeveelheden kunnen afwijken
-- Voeg bij de ingredienten toe: "(hoeveelheden bij benadering)" als eerste regel`
-                            }]
-                        }]
-                    };
+                    // No description available - show error
+                    throw new Error('Kon geen receptinformatie uit deze YouTube video halen. De videobeschrijving is leeg of niet bereikbaar.');
                 }
             } else {
                 document.getElementById('loadingText').textContent = 'Recept wordt opgehaald...';
@@ -692,24 +686,8 @@ De videobeschrijving kon niet worden opgehaald. Geef op basis van de videotitel$
                         }]
                     };
                 } else {
-                    // Page couldn't be fetched - extract recipe name from URL and ask Gemini
-                    const recipeName = extractRecipeNameFromUrl(input);
-                    const siteName = new URL(input).hostname.replace('www.', '');
-                    document.getElementById('loadingText').textContent = 'Pagina niet bereikbaar, AI maakt recept op basis van naam...';
-                    requestBody = {
-                        contents: [{
-                            parts: [{
-                                text: prompt + `\n\nGeef het recept voor: "${recipeName}" (van ${siteName})
-BRON URL: ${input}
-
-BELANGRIJK: Je hoeft de URL NIET te openen. Gebruik je eigen kennis om dit recept te geven.
-Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in het gevraagde format.
-- Geef het recept zo nauwkeurig en authentiek mogelijk voor 4 personen
-- Gebruik standaard Nederlandse ingredienten en hoeveelheden
-- Dit recept komt van ${siteName}, houd daar rekening mee qua stijl`
-                            }]
-                        }]
-                    };
+                    // Page couldn't be fetched - show error, don't invent a recipe
+                    throw new Error('Deze website kon niet worden bereikt. Probeer een screenshot te maken van het recept en gebruik de Foto tab.');
                 }
             }
 
@@ -747,29 +725,15 @@ Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in h
                     }
 
                     let recipe = text.trim();
-                    // Replace placeholder with actual cooked.wiki link
+                    // Remove any Porties aanpassen line Gemini may have added
+                    recipe = recipe.replace(/\n?Porties aanpassen:.*$/gm, '');
+                    // Add cooked.wiki link for URL-based recipes
                     const sourceUrl = (!imageData && input) ? input : null;
                     if (sourceUrl) {
                         const cookedUrl = `https://cooked.wiki/loading/new?url=${encodeURIComponent(sourceUrl)}`;
-                        recipe = recipe.replace(
-                            /Porties aanpassen:.*(\[WORDT AUTOMATISCH INGEVULD\]|https:\/\/cooked\.wiki\/?)/,
-                            `Porties aanpassen: ${cookedUrl}`
-                        );
-                        // If placeholder wasn't in the response, append it
-                        if (!recipe.includes('cooked.wiki/loading/new')) {
-                            recipe = recipe.replace(
-                                /Porties aanpassen:.*/,
-                                `Porties aanpassen: ${cookedUrl}`
-                            );
-                        }
-                        if (!recipe.includes('Porties aanpassen')) {
-                            recipe += `\nPorties aanpassen: ${cookedUrl}`;
-                        }
-                    } else {
-                        // Photo mode - remove the placeholder line
-                        recipe = recipe.replace(/\nPorties aanpassen:.*\[WORDT AUTOMATISCH INGEVULD\]/, '');
+                        recipe += `\nPorties aanpassen: ${cookedUrl}`;
                     }
-                    return { recipe, imageUrl: fetchedImageUrl, sourceUrl };
+                    return { recipe: recipe.trim(), imageUrl: fetchedImageUrl, sourceUrl };
                 } catch (e) {
                     lastError = e;
                     if (e.message.includes('quota') || e.message.includes('rate') || e.message.includes('429')) continue;
@@ -821,8 +785,8 @@ Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in h
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/^- (.+)$/gm, '&bull; $1')
                 .replace(/^---$/gm, '<hr>')
-                .replace(/Porties aanpassen: (https:\/\/cooked\.wiki\/[^\s]+)/g, 'Porties aanpassen: <a href="$1" target="_blank" style="color: var(--accent);">klik hier</a>')
-                .replace(/Bron: (https?:\/\/[^\s]+)/g, 'Bron: <a href="$1" target="_blank" style="color: var(--accent);">$1</a>')
+                .replace(/Porties aanpassen: (https:\/\/cooked\.wiki[^\s\]]+)/g, 'Porties aanpassen: <a href="$1" target="_blank" style="color: var(--accent);">klik hier</a>')
+                .replace(/Bron: \[?(https?:\/\/[^\s\]]+)\]?/g, 'Bron: <a href="$1" target="_blank" style="color: var(--accent);">$1</a>')
                 .replace(/(#\w+)/g, '<span class="hashtag">$1</span>')
                 .replace(/^(INGREDIENTEN|BENODIGDHEDEN|STAPPENPLAN)$/gm, '<h2>$1</h2>')
                 .replace(/^(STAP \d+ - .+)$/gm, '<strong>$1</strong>')
@@ -836,6 +800,7 @@ Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in h
                 .replace(/\*\*/g, '')
                 .replace(/^#{1,2}\s*/gm, '')
                 .replace(/---/g, '---')
+                .replace(/Bron: \[?(https?:\/\/[^\s\]]+)\]?/g, 'Bron: $1')
                 .replace(/\n{3,}/g, '\n\n');
 
             // Copy to clipboard using both methods for iOS compatibility
@@ -869,6 +834,7 @@ Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in h
             const plainText = recipeData.recipe
                 .replace(/\*\*/g, '')
                 .replace(/^#{1,2}\s*/gm, '')
+                .replace(/Bron: \[?(https?:\/\/[^\s\]]+)\]?/g, 'Bron: $1')
                 .replace(/\n{3,}/g, '\n\n');
 
             const textarea = document.createElement('textarea');
