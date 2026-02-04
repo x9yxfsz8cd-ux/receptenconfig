@@ -407,18 +407,28 @@
 
         async function fetchUrlContent(url) {
             const proxies = [
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-                `https://corsproxy.io/?${encodeURIComponent(url)}`
+                { url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, json: true },
+                { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, json: false },
+                { url: `https://corsproxy.io/?${encodeURIComponent(url)}`, json: false },
+                { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, json: false }
             ];
-            for (const proxyUrl of proxies) {
+            for (const proxy of proxies) {
                 try {
-                    const response = await fetch(proxyUrl);
+                    const response = await fetch(proxy.url, { signal: AbortSignal.timeout(8000) });
                     if (response.ok) {
-                        const html = await response.text();
+                        let html;
+                        if (proxy.json) {
+                            const data = await response.json();
+                            html = data.contents;
+                        } else {
+                            html = await response.text();
+                        }
+                        if (!html || html.length < 100) continue;
                         const doc = new DOMParser().parseFromString(html, 'text/html');
 
                         // Extract image BEFORE removing scripts (JSON-LD is in script tags)
-                        let imageUrl = extractImageUrl(doc, url);
+                        let imageUrl = null;
+                        try { imageUrl = extractImageUrl(doc, url); } catch (e) {}
 
                         doc.querySelectorAll('script, style, nav, footer, aside').forEach(el => el.remove());
 
@@ -431,11 +441,26 @@
                         if (!content) content = doc.body?.textContent || '';
                         content = content.replace(/\s+/g, ' ').trim().substring(0, 15000);
 
-                        return { content, imageUrl, title: doc.title };
+                        if (content.length > 200) {
+                            return { content, imageUrl, title: doc.title };
+                        }
                     }
                 } catch (e) { continue; }
             }
-            throw new Error('Kon de pagina niet ophalen.');
+            return null;
+        }
+
+        function extractRecipeNameFromUrl(url) {
+            try {
+                const path = new URL(url).pathname;
+                const parts = path.split('/').filter(p => p.length > 0);
+                // Get last meaningful part of URL path
+                let slug = parts[parts.length - 1] || '';
+                // Remove common ID prefixes like R-R1188320
+                slug = slug.replace(/^[A-Z]-[A-Z]\d+[-/]?/, '');
+                // Convert slug to readable name
+                return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
+            } catch (e) { return ''; }
         }
 
         async function fetchYouTubeInfo(videoId, apiKey) {
@@ -656,14 +681,36 @@ De videobeschrijving kon niet worden opgehaald. Geef op basis van de videotitel$
             } else {
                 document.getElementById('loadingText').textContent = 'Recept wordt opgehaald...';
                 const pageData = await fetchUrlContent(input);
-                fetchedImageUrl = pageData.imageUrl;
-                requestBody = {
-                    contents: [{
-                        parts: [{
-                            text: prompt + `\n\nHieronder staat de inhoud van een receptpagina. Extraheer het recept en zet het om naar het gevraagde format.\nBRON URL: ${input}\nBehoud het recept zo origineel mogelijk - verander alleen het format en reken om naar 4 personen.\n\n---\n${pageData.content}\n---`
+
+                if (pageData && pageData.content) {
+                    fetchedImageUrl = pageData.imageUrl;
+                    requestBody = {
+                        contents: [{
+                            parts: [{
+                                text: prompt + `\n\nHieronder staat de inhoud van een receptpagina. Extraheer het recept en zet het om naar het gevraagde format.\nBRON URL: ${input}\nBehoud het recept zo origineel mogelijk - verander alleen het format en reken om naar 4 personen.\n\n---\n${pageData.content}\n---`
+                            }]
                         }]
-                    }]
-                };
+                    };
+                } else {
+                    // Page couldn't be fetched - extract recipe name from URL and ask Gemini
+                    const recipeName = extractRecipeNameFromUrl(input);
+                    const siteName = new URL(input).hostname.replace('www.', '');
+                    document.getElementById('loadingText').textContent = 'Pagina niet bereikbaar, AI maakt recept op basis van naam...';
+                    requestBody = {
+                        contents: [{
+                            parts: [{
+                                text: prompt + `\n\nGeef het recept voor: "${recipeName}" (van ${siteName})
+BRON URL: ${input}
+
+BELANGRIJK: Je hoeft de URL NIET te openen. Gebruik je eigen kennis om dit recept te geven.
+Het gerecht "${recipeName}" is een bekend recept. Geef het volledige recept in het gevraagde format.
+- Geef het recept zo nauwkeurig en authentiek mogelijk voor 4 personen
+- Gebruik standaard Nederlandse ingredienten en hoeveelheden
+- Dit recept komt van ${siteName}, houd daar rekening mee qua stijl`
+                            }]
+                        }]
+                    };
+                }
             }
 
             document.getElementById('loadingText').textContent = 'Recept wordt geanalyseerd met AI...';
@@ -730,12 +777,14 @@ De videobeschrijving kon niet worden opgehaald. Geef op basis van de videotitel$
                 }
             }
 
+            const actualError = lastError?.message || 'Onbekende fout';
             throw new Error(
                 'Alle AI modellen zijn op dit moment niet beschikbaar.\n\n' +
-                'Oplossing: Maak een nieuwe API key aan:\n' +
-                '1. Ga naar aistudio.google.com/apikey\n' +
-                '2. Klik "Create API Key in new project"\n' +
-                '3. Plak de nieuwe key in de instellingen'
+                'Foutmelding: ' + actualError.substring(0, 200) + '\n\n' +
+                'Mogelijke oplossingen:\n' +
+                '1. Wacht even en probeer opnieuw (rate limit)\n' +
+                '2. Maak een nieuwe API key aan op aistudio.google.com/apikey\n' +
+                '3. Controleer of je billing hebt ingesteld in Google Cloud'
             );
         }
 
